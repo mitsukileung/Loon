@@ -1,31 +1,23 @@
 /*
- * @Author: shylocks https://github.com/shylocks
- * @Date: 2021-01-11 16:25:41
- * @Last Modified by:   shylocks
- * @Last Modified time: 2021-01-11 18:25:41
- */
+开卡活动
+活动入口：https://u.jd.com/w6srT2x
+一次性活动，运行完脚本获得53京豆，进入入口还可以开卡领30都
+*/
+const $ = new Env('开卡活动');
 
-const $ = new Env('宠汪汪聚宝盆监控');
 const notify = $.isNode() ? require('./sendNotify') : '';
+//Node.js用户请在jdCookie.js处填写京东ck;
 const jdCookieNode = $.isNode() ? require('./jdCookie.js') : '';
+let configList = ["59ba253bfb744a27a0cfa93cf3d71c25"]
+let configCode = ''
+//IOS等用户直接用NobyDa的jd cookie
 let cookiesArr = [], cookie = '', message;
-let connection
 if ($.isNode()) {
   Object.keys(jdCookieNode).forEach((item) => {
     cookiesArr.push(jdCookieNode[item])
   })
   if (process.env.JD_DEBUG && process.env.JD_DEBUG === 'false') console.log = () => {
   };
-  if(JSON.stringify(process.env).indexOf('GITHUB')>-1) process.exit(0)
-  const mysql = require('mysql');
-  connection = mysql.createConnection({
-    host: '127.0.0.1',
-    user: 'root',
-    password: process.env.MYSQL_PASSWORD,
-    database: 'jd_scripts'
-  })
-  connection.connect()
-
 } else {
   let cookiesData = $.getdata('CookiesJD') || "[]";
   cookiesData = jsonParse(cookiesData);
@@ -33,36 +25,38 @@ if ($.isNode()) {
   cookiesArr.reverse();
   cookiesArr.push(...[$.getdata('CookieJD2'), $.getdata('CookieJD')]);
   cookiesArr.reverse();
-  cookiesArr = cookiesArr.filter(item => item !== "" && item !== null && item !== undefined);
 }
-let ls = []
+const JD_API_HOST = 'https://jdjoy.jd.com/module/';
 !(async () => {
+  $.newShareCodes = []
   if (!cookiesArr[0]) {
     $.msg($.name, '【提示】请先获取京东账号一cookie\n直接使用NobyDa的京东签到获取', 'https://bean.m.jd.com/', {"open-url": "https://bean.m.jd.com/"});
     return;
   }
-  for (let i = 0; i < cookiesArr.length; i++) {
-    if (cookiesArr[i]) {
-      cookie = cookiesArr[i];
-      $.UserName = decodeURIComponent(cookie.match(/pt_pin=(.+?);/) && cookie.match(/pt_pin=(.+?);/)[1])
-      $.index = i + 1;
-      $.isLogin = true;
-      $.nickName = '';
-      $.beans = 0
-      message = '';
-      await TotalBean();
-      console.log(`\n******开始【京东账号${$.index}】${$.nickName || $.UserName}*********\n`);
-      if (!$.isLogin) {
-        $.msg($.name, `【提示】cookie已失效`, `京东账号${$.index} ${$.nickName || $.UserName}\n请重新登录获取\nhttps://bean.m.jd.com/`, {"open-url": "https://bean.m.jd.com/"});
-        if ($.isNode()) {
-          await notify.sendNotify(`${$.name}cookie已失效 - ${$.UserName}`, `京东账号${$.index} ${$.UserName}\n请重新登录获取cookie`);
-        } else {
-          $.setdata('', `CookieJD${i ? i + 1 : ""}`);//cookie失效，故清空cookie。$.setdata('', `CookieJD${i ? i + 1 : "" }`);//cookie失效，故清空cookie。
+  for (let j=0;j<configList.length; ++j) {
+    configCode = configList[j]
+    for (let i = 0; i < cookiesArr.length; i++) {
+      if (cookiesArr[i]) {
+        cookie = cookiesArr[i];
+        $.UserName = decodeURIComponent(cookie.match(/pt_pin=(.+?);/) && cookie.match(/pt_pin=(.+?);/)[1])
+        $.index = i + 1;
+        $.isLogin = true;
+        $.nickName = '';
+        message = '';
+        await TotalBean();
+        console.log(`\n******开始【京东账号${$.index}】${$.nickName || $.UserName}*********\n`);
+        if (!$.isLogin) {
+          $.msg($.name, `【提示】cookie已失效`, `京东账号${$.index} ${$.nickName || $.UserName}\n请重新登录获取\nhttps://bean.m.jd.com/`, {"open-url": "https://bean.m.jd.com/"});
+
+          if ($.isNode()) {
+            await notify.sendNotify(`${$.name}cookie已失效 - ${$.UserName}`, `京东账号${$.index} ${$.UserName}\n请重新登录获取cookie`);
+          } else {
+            $.setdata('', `CookieJD${i ? i + 1 : ""}`);//cookie失效，故清空cookie。$.setdata('', `CookieJD${i ? i + 1 : "" }`);//cookie失效，故清空cookie。
+          }
+          continue
         }
-        continue
+        await jdBeanHome();
       }
-      await jdMh()
-      return
     }
   }
 })()
@@ -73,65 +67,126 @@ let ls = []
     $.done();
   })
 
-async function jdMh() {
-  while (true) {
-    await getUserInfo()
-    await $.wait(1000)
-  }
+async function jdBeanHome() {
+  await getCardInfo()
+  await getTaskList()
 }
-
-function getUserInfo() {
+function getCardInfo() {
   return new Promise(resolve => {
-    $.get(taskUrl(), async (err, resp, data) => {
+    $.post(taskUrl('unioncard/getHomeInfo/',`configCode=${configCode}&invitePin=wddpzLSxORvLGo`), async (err, resp, data) => {
       try {
         if (err) {
-          console.log(`${err},${jsonParse(resp.body)['message']}`)
-          console.log(`${$.name} API请求失败，请检查网路重试`)
         } else {
-          data = JSON.parse(data)
-          if (data.success) {
-            let hour
-            for (let vo of data.data.investList) {
-              hour = new Date(vo['investTime']).getHours().toString()
-              if (ls.includes(`${vo.nickName}_${vo.investTime}_${vo.food}`)) continue
-              ls.push(`${vo.nickName}_${vo.investTime}_${vo.food}`) // investTime 1610430877976
-              let obj = {
-                'nickName': vo.nickName,
-                'investTime': vo.investTime,
-                'food': vo.food,
-                date: `${new Date().getFullYear()}${(new Date().getMonth() + 1).toString().padStart(2, '0')}${new Date().getDate().toString().padStart(2, '0')}${new Date().getHours().toString().padStart(2, '0')}`
-              }
-              connection.query('INSERT INTO joy_treasure SET ?', obj, function (error, results, fields) {
-                if (error) throw error;
-              });
+          if (safeGet(data)) {
+            data = JSON.parse(data);
+            if(data['success']){
+              console.log(data['data']['activityDetail']['mainTitle'])
             }
           }
         }
       } catch (e) {
         $.logErr(e, resp)
       } finally {
-        resolve(data);
+        resolve();
+      }
+    })
+  })
+}
+function getTaskList() {
+  return new Promise(resolve => {
+    $.post(taskUrl('task/getMyTask',`configCode=${configCode}`), async (err, resp, data) => {
+      try {
+        if (err) {
+        } else {
+          if (safeGet(data)) {
+            data = JSON.parse(data);
+            if(data['success']){
+              for (let i = 0; i < data.data.myTasks.length; ++i){
+                const task = data.data.myTasks[i]
+                let groupType
+                if(task.groupType===1) {
+                  groupType = 'FOLLOW_SHOP'
+                  $.log(`关注店铺任务，完成次数: ${task.finishCount}/${task.itemCount}`)
+                } else if(task.groupType===2){
+                  groupType = 'ADD_CART'
+                  $.log(`加购任务，完成次数: ${task.finishCount}/${task.itemCount}`)
+                } else if (task.groupType===3){
+                  groupType = 'FOLLOW_CHANNEL'
+                  $.log(`逛会场任务，完成次数: ${task.finishCount}/${task.itemCount}`)
+                  if (task.finishCount< task.itemCount)
+                    await $.wait(task.viewTime*1000)
+                } else if (task.groupType===4){
+                  groupType = 'VIEW_GOODS'
+                  $.log(`浏览商品任务，完成次数: ${task.finishCount}/${task.itemCount}`)
+                }
+                for (let j = task.finishCount; j < task.itemCount; ++j){
+                  await doTask(groupType, task.item.itemId)
+                  await $.wait(task.viewTime < 5 ? 5000 : task.viewTime*1000)
+                }
+              }
+              if (data.data.rewardStatus!==3) {
+                $.log(`去领取额外${data.data.rewardFinish}京豆`)
+                await doTask("FINISH_TASK",0)
+                const res = await doTask("FINISH_TASK",0)
+                if(res['success']){
+                  $.log(`领取额外${data.data.rewardFinish}京豆完成成功，获得${data.data.rewardFinish}京豆`)
+                }
+              }
+            } else{
+              console.log('获取失败，请检查是否黑号')
+            }
+          }
+        }
+      } catch (e) {
+        $.logErr(e, resp)
+      } finally {
+        resolve();
       }
     })
   })
 }
 
-function taskUrl() {
+function doTask(groupType,itemId) {
+  return new Promise(resolve => {
+    $.post(taskUrl('task/doTask',`configCode=${configCode}&groupType=${groupType}&finishCount=0&itemId=${itemId}`),
+      async (err, resp, data) => {
+        try {
+          if (err) {
+          } else {
+            if (safeGet(data)) {
+              data = JSON.parse(data);
+              if(data['success']){
+                console.log(`任务完成成功`)
+              }else{
+                console.log('任务完成失败')
+              }
+            }
+          }
+        } catch (e) {
+          $.logErr(e, resp)
+        } finally {
+          resolve(data);
+        }
+      })
+  })
+}
+
+
+function taskUrl(functionId,body) {
   return {
-    url: `https://jdjoy.jd.com/pet/getPetTreasureBox?reqSource=h5`,
+    url: `${JD_API_HOST}/${functionId}?${body}`,
     headers: {
-      'Host': 'wq.jd.com',
-      'Accept': 'application/json',
-      'Accept-Language': 'zh-cn',
-      'Content-Type': 'application/json;charset=utf-8',
-      'Origin': 'wq.jd.com',
-      'User-Agent': 'JD4iPhone/167490 (iPhone; iOS 14.2; Scale/3.00)',
-      'Referer': `https://prodev.m.jd.com/mall/active/3jJeMiGjB4uEwdEM1aYbQeom3cbK/index.html`,
-      'Cookie': cookie
+      'Cookie': cookie,
+      'Host': 'jdjoy.jd.com',
+      'Accept': '*/*',
+      'Connection': 'keep-alive',
+      'User-Agent': $.isNode() ? (process.env.JD_USER_AGENT ? process.env.JD_USER_AGENT : "jdapp;iPhone;9.2.2;14.2;%E4%BA%AC%E4%B8%9C/9.2.2 CFNetwork/1206 Darwin/20.1.0") : ($.getdata('JDUA') ? $.getdata('JDUA') : "jdapp;iPhone;9.2.2;14.2;%E4%BA%AC%E4%B8%9C/9.2.2 CFNetwork/1206 Darwin/20.1.0"),
+      'Accept-Language': 'zh-Hans-CN;q=1,en-CN;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Content-Type': "application/x-www-form-urlencoded"
     }
   }
 }
-
 
 function TotalBean() {
   return new Promise(async resolve => {
@@ -174,13 +229,24 @@ function TotalBean() {
   })
 }
 
+function safeGet(data) {
+  try {
+    if (typeof JSON.parse(data) == "object") {
+      return true;
+    }
+  } catch (e) {
+    console.log(e);
+    console.log(`京东服务器访问数据为空，请检查自身设备网络情况`);
+    return false;
+  }
+}
 function jsonParse(str) {
   if (typeof str == "string") {
     try {
       return JSON.parse(str);
     } catch (e) {
       console.log(e);
-      $.msg($.name, '', '不要在BoxJS手动复制粘贴修改cookie')
+      $.msg($.name, '', '请勿随意在BoxJs输入框修改内容\n建议通过脚本去获取cookie')
       return [];
     }
   }
